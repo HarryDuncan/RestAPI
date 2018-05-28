@@ -1,0 +1,166 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Data.Services;
+using System.Data.Services.Common;
+using System.Linq;
+using System.ServiceModel;
+using System.ServiceModel.Web;
+using System.Web;
+using System.Xml.Linq;
+
+namespace WebApplication1
+{
+    [ServiceBehavior(IncludeExceptionDetailInFaults = true)]
+    public class WcfDataService1 : DataService<MyDataSource>
+    {
+        public static void InitializeService(DataServiceConfiguration config)
+        {
+            config.SetEntitySetAccessRule("*", EntitySetRights.AllRead);
+            // config.SetServiceOperationAccessRule("MyServiceOperation", ServiceOperationRights.All);
+            config.DataServiceBehavior.MaxProtocolVersion = DataServiceProtocolVersion.V3;
+            config.UseVerboseErrors = true;
+        }
+    }
+
+
+    public class MyDataSource
+    {
+        static string FOLDER = @".\data\"; // HttpContext.Current.Server.MapPath("/data"); // @"C:\usertmp\";
+
+        static MyDataSource()
+        {
+            Console.WriteLine($"... loading {FOLDER}\\XCategories.xml");
+            _Categories =
+                XElement.Load(FOLDER + @"\XCategories.xml")
+                .Elements("Category")
+                .Select(x => new Category
+                {
+                    CategoryID = string.IsNullOrEmpty((string)x.Element("CategoryID")) ? 0 : (int)x.Element("CategoryID"),
+                    CategoryName = (string)x.Element("CategoryName"),
+                    Description = (string)x.Element("Description")
+                }).ToArray();
+
+            Console.WriteLine($"... loading {FOLDER}\\XSuppliers.xml");
+            _Suppliers =
+                XElement.Load(FOLDER + @"\XSuppliers.xml")
+                .Elements("Supplier")
+                .Select(x => new Supplier
+                {
+                    SupplierID = (int)x.Element("SupplierID"),
+                    CompanyName = (string)x.Element("CompanyName"),
+                    ContactName = (string)x.Element("ContactName"),
+                    Country = (string)x.Element("Country")
+                }).ToArray();
+
+            Console.WriteLine($"... loading {FOLDER}\\XProducts.xml");
+            _Products =
+                XElement.Load(FOLDER + @"\XProducts.xml")
+                .Elements("Product")
+                .Select(x => new Product
+                {
+                    ProductID = (int)x.Element("ProductID"),
+                    ProductName = (string)x.Element("ProductName"),
+                    SupplierID = string.IsNullOrEmpty((string)x.Element("SupplierID")) ? 0 : (int?)x.Element("SupplierID"),
+                    CategoryID = string.IsNullOrEmpty((string)x.Element("CategoryID")) ? 0 : (int)x.Element("CategoryID"),
+                    UnitPrice = string.IsNullOrEmpty((string)x.Element("UnitPrice")) ? 0 : (decimal)x.Element("UnitPrice"),
+                    UnitsInStock = string.IsNullOrEmpty((string)x.Element("UnitsInStock")) ? 0 : (int?)x.Element("UnitsInStock"),
+                    UnitsOnOrder = string.IsNullOrEmpty((string)x.Element("UnitsOnOrder")) ? 0 : (int?)x.Element("UnitsOnOrder")
+                }).ToArray();
+
+
+            Console.WriteLine($"... relating _Categories, _Products and _Suppliers");
+            //Querying Category ID in products
+            var _Cat_Prod_lookup = _Products.Where(o => o.CategoryID.HasValue).ToLookup(o => o.CategoryID);
+            var _CategoryDict = _Categories.ToDictionary(c => c.CategoryID);
+            foreach (var o in _Products) o.Category = _CategoryDict[(int)o.CategoryID];
+            foreach (var c in _Categories) c.Product = _Cat_Prod_lookup[c.CategoryID];
+
+
+            //Querying SupplierID in products
+            var _Sup_prod_lookup = _Products.Where(o => o.SupplierID.HasValue).ToLookup(o => o.SupplierID);
+            var _SupplierDict = _Suppliers.ToDictionary(c => c.SupplierID);
+            foreach (var o in _Products) o.Supplier = _SupplierDict[(int)o.SupplierID];
+            foreach (var c in _Suppliers) c.Product = _Sup_prod_lookup[c.SupplierID];
+            Console.WriteLine($"... starting");
+
+ 
+
+        }
+
+        // Enumerables UDO
+        static IEnumerable<Category> _Categories;
+        static IEnumerable<Supplier> _Suppliers;
+        static IEnumerable<Product> _Products;
+        // Queryables UDO
+
+        public IQueryable<Category> Categories
+        {
+            get
+            {
+                Console.WriteLine($"... returning Categories");
+                return _Categories.AsQueryable();
+            }
+        }
+
+        public IQueryable<Supplier> Suppliers
+        {
+            get
+            {
+                Console.WriteLine($"... returning Suppliers");
+                return _Suppliers.AsQueryable();
+            }
+        }
+
+        public IQueryable<Product> Products
+        {
+            get
+            {
+                Console.WriteLine($"... returning Products");
+                return _Products.AsQueryable();
+            }
+        }
+    }
+
+
+
+
+
+
+
+    [DataServiceKey("CategoryID")]
+    public class Category
+    {
+        public int CategoryID { get; set; }
+        public string CategoryName { get; set; }
+        public string Description { get; set; }
+        public Product product { get; set; }
+        public IEnumerable<Product> Product { get; set; }
+
+    }
+    [DataServiceKey("SupplierID")]
+    public class Supplier
+    {
+        public int SupplierID { get; set; }
+        public string CompanyName { get; set; }
+        public string ContactName { get; set; }
+        public string Country { get; set; }
+        public Product product { get; set; }
+        public IEnumerable<Product> Product { get; set; }
+
+    }
+    [DataServiceKey("ProductID")]
+    public class Product
+    {
+        public int ProductID { get; set; }
+        public string ProductName { get; set; }
+        public int? SupplierID { get; set; }
+        public int? CategoryID { get; set; }
+        public int QuantityPerUnit { get; set; }
+        public decimal? UnitPrice { get; set; }
+        public int? UnitsInStock { get; set; }
+        public int? UnitsOnOrder { get; set; }
+        public Category Category { get; set; }
+        public Supplier Supplier { get; set; }
+
+    }
+    }
